@@ -33,7 +33,7 @@ static struct user_item *get_user_table(void)
 
 	file_size = lseek(fd, 0, SEEK_END);
 	if ((file_size < 1) ||
-	    (file_size % sizeof(struct user_info) != 0)) {
+	    (file_size % sizeof(struct user_item) != 0)) {
 		printf("%s: Failed to get user list size， %ld\n", __func__, file_size);
 		goto err;
 	}

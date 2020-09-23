@@ -83,7 +83,7 @@ static void client_write(int fd)
 	struct message *msg;
 	struct clt_message *clt_msg;
 	size_t msg_len;
-	int i = 0;
+	int i = 0, err;
 
 	msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct clt_message));
 	msg = (struct message *)malloc(msg_len);
@@ -103,11 +103,17 @@ static void client_write(int fd)
 		i++;
 		if (i >= 5) {
 			clt_msg->user.logon_status = 0;
-			msg_send(fd, &msg, msg_len, 0);
+			err = msg_send(fd, msg, msg_len, 0);
+			if (err < 0) {
+				printf("Failed to send message to server\n");
+			}
 			sleep(1);
 			break;
 		}
-		msg_send(fd, &msg, msg_len, 0);
+		err = msg_send(fd, msg, msg_len, 0);
+		if (err < 0) {
+			printf("Failed to send message to server\n");
+		}
 		sleep(3);
 	}
 	pthread_exit(NULL);
@@ -120,7 +126,7 @@ static int client_logon(int fd)
 	size_t msg_len;
 	int err;
 
-	msg_len = sizeof(struct message) + sizeof(struct user_info);
+	msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct user_info));
 	clt_msg = (struct message *)malloc(msg_len);
 	if (!clt_msg) {
 		printf("%s: Failed to alloc memory for message\n", __func__);
@@ -129,7 +135,7 @@ static int client_logon(int fd)
 
 	memset(clt_msg, 0, msg_len);
 	clt_msg->header.magic_num = MAGIC;
-	clt_msg->header.msg_length = msg_len;
+	clt_msg->header.msg_length = sizeof(struct user_info);
 	memcpy(clt_msg->priv_data, &user, sizeof(user));
 
 	err = msg_send(fd, clt_msg, msg_len, 0);
@@ -194,7 +200,6 @@ static void *client_socket_thread(void *arg)
 
 	if (tinfo->port == LOGON_PORT && user.logon_status != 1) {
 		err = client_logon(fd);
-		printf("====================================\n");
 		if (err < 0)
 			goto exit;
 	}
@@ -208,6 +213,28 @@ static void *client_socket_thread(void *arg)
 exit:
 	close(fd);
 	pthread_exit(NULL);
+}
+
+static int setup_userinfo(struct user_info *user, const char *name, const char *passwd, u32 userid)
+{
+	if (!user || !passwd || !name)
+		return -1;
+
+	if (name) {
+		if (strlen(name) > sizeof(user->alias) - 1)
+			return -1;
+		strncpy(user->alias, name, strlen(name));
+	}
+
+	if (passwd) {
+		if (strlen(passwd) > sizeof(user->passwd) - 1)
+			return -1;
+		strncpy(user->passwd, passwd, strlen(passwd));
+	}
+
+	user->usrid = userid;
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -228,17 +255,25 @@ int main(int argc, char *argv[])
 		},
 	};
 
-	if (argc < 2) {
+	if (argc != 2) {
 		printf("%s: Usage: %s <ip addr>\n", __func__, argv[0]);
 		return 0;
 	}
 
-	memset(&user, 0, sizeof(user));
-	user.usrid = USER_ID;
-	memcpy(user.alias, USER_NAME, sizeof(user.alias) - 1);
-	memcpy(user.passwd, PASSWD, sizeof(user.passwd) - 1);
+	if (!argv[1]) {
+		printf("Error: invalid ip address\n");
+		return -1;
+	}
 
-	pthread_create(&tinfo[0].tid, NULL, tinfo[0].thread_socket, &tinfo[i]);
+	memset(&user, 0, sizeof(user));
+
+	if (setup_userinfo(&user, USER_NAME, PASSWD, USER_ID)) {
+		printf("Failed to setup user %s info\n", USER_NAME);
+		return -1;
+	}
+
+	tinfo[0].data = argv[1];
+	pthread_create(&tinfo[0].tid, NULL, tinfo[0].thread_socket, &tinfo[0]);
 	pthread_join(tinfo[0].tid, NULL);
 
 	if (user.logon_status != 1)

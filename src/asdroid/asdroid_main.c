@@ -140,12 +140,28 @@ static void motor_action(enum as_command cmd)
 
 static void asdroid_motor_handle(int fd)
 {
-	enum as_command cmd;
+	struct message *msg = NULL;
+	struct clt_message *clt_msg = NULL;
+	size_t msg_len;
+	int err;
+
+	msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct clt_message));
+	msg = (struct message *)malloc(msg_len);
+	if (!msg)
+		pthread_exit(NULL);
 
 	while(1) {
-		recv(fd, &cmd, sizeof(cmd), 0);
-		motor_action(cmd);
+		err = msg_recv(fd, &msg, msg_len, 0);
+		if (err < 0) {
+			printf("Failed to recv message from server\n");
+			continue;
+		}
+		clt_msg = (struct clt_message *)msg->priv_data;
+		motor_action(clt_msg->cmd);
 	}
+
+	if (msg)
+		free(msg);
 	pthread_exit(NULL);
 }
 
@@ -202,9 +218,14 @@ int main(int argc, char *argv[])
 		},
 	};
 
-	if (argc < 2) {
+	if (argc != 2) {
 		printf("%s: Usage: %s <ip addr>\n", __func__, argv[0]);
 		return 0;
+	}
+
+	if (!argv[1]) {
+		printf("Error: invalid ip address\n");
+		return -1;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tinfo); i++) {

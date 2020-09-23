@@ -28,27 +28,6 @@ static u8 *str2hex(u8 *str)
 	return hex;
 }
 
-static u8 *padding(const u8 *buf, int size)
-{
-	u8 *out = NULL;
-	int pidding_size = 0;
-	int i;
-
-	if (size % AES_BLOCK_SIZE)
-		pidding_size = AES_BLOCK_SIZE - (size % AES_BLOCK_SIZE);
-
-	out = (u8 *)malloc(size + pidding_size);
-	if (!out)
-		return out;
-
-	if (pidding_size != 0)
-		memset(out + size, 0, pidding_size);
-
-	memcpy(out, buf, size);
-
-	return out;
-}
-
 void aes_encrypt(const u8 *raw_buf, u8 **encryp_buf, int len)
 {
 	AES_KEY aes;
@@ -95,18 +74,10 @@ void md5_encrypt(u8 *raw_buf, u8 *enc_buf, u32 raw_len)
 
 int msg_aes_encrypt(const u8 *raw_buf, u8 **encryp_buf, int len)
 {
-	u8 *pad_buf = NULL;
-
-	pad_buf = padding(raw_buf, len);
-	if (!pad_buf) {
-		printf("Padding failed\n");
+	if (len%AES_BLOCK_SIZE)
 		return -1;
-	}
 
-	aes_encrypt(pad_buf, encryp_buf, AES_PADDING_LEN(len));
-
-	if (pad_buf)
-		free(pad_buf);
+	aes_encrypt(raw_buf, encryp_buf, AES_PADDING_LEN(len));
 
 	return 0;
 }

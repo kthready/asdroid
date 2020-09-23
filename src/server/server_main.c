@@ -70,7 +70,7 @@ static void *msg_from_asdroid_to_client(void *arg)
 	memset(pre_msg, 0, pre_msg_len);
 	memset(kick_msg, 0, kick_msg_len);
 	kick_msg->header.magic_num = MAGIC;
-	kick_msg->header.msg_length = sizeof(struct message) + sizeof(struct as_message);
+	kick_msg->header.msg_length = sizeof(struct as_message);
 	as_msg = (struct as_message *)kick_msg->priv_data;
 	as_msg->flag = CMD_KICK;
 
@@ -138,30 +138,37 @@ out:
 	if (vd_msg)
 		free(vd_msg);
 
-	return NULL;
+	pthread_exit(NULL);
 }
 
 static void *msg_from_client_to_asdroid(void *arg)
 {
 	int fd = *(int *)arg;
 	struct message *msg = NULL;
+	struct clt_message *clt_msg = NULL;
 	size_t msg_len;
 	int err;
 
 	msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct clt_message));
 	msg = (struct message *)malloc(msg_len);
 	if (!msg)
-		return NULL;
+		pthread_exit(NULL);
 
 	while(1) {
 		printf("%s\n", __func__);
 		if (cltfd.rdfd == 0) {
-			sleep(10);
+			sleep(1);
 			continue;
 		}
 		err = msg_recv(cltfd.rdfd, &msg, msg_len, 0);
 		if (err < 0) {
 			printf("%s: Failed to read message from client\n", __func__);
+			continue;
+		}
+		clt_msg = msg->priv_data;
+		if (clt_msg->user.logon_status == 0) {
+			cltfd.wrfd = 0;
+			cltfd.rdfd = 0;
 			continue;
 		}
 
@@ -173,7 +180,7 @@ static void *msg_from_client_to_asdroid(void *arg)
 	if (msg)
 		free(msg);
 
-	return NULL;
+	pthread_exit(NULL);
 }
 
 static void *logon_verification(void *arg)
