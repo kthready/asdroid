@@ -10,23 +10,30 @@ TARGET_PATH = out
 
 MKDIR = mkdir -p
 RM = rm -rf
+MV = mv
 
 SVR_TARGET = server
 AS_TARGET = asdroid
 CLT_TARGET = client
+USER_TOOL_TARGET = usertool
 
-SVR_SRC = src/server/server_main.c
-AS_SRC = src/asdroid/asdroid_main.c src/asdroid/capture.c src/lib/crypto.c
-CLT_SRC = src/client/client_main.c src/lib/crypto.c
+SVR_SRC = src/server/server_main.c src/server/user_verify.c src/lib/crypto.c src/lib/message.c
+AS_SRC = src/asdroid/asdroid_main.c src/asdroid/capture.c src/lib/crypto.c src/lib/message.c
+CLT_SRC = src/client/client_main.c src/lib/crypto.c src/lib/message.c
+USER_TOOL_SRC = src/server/usertool.c src/lib/crypto.c
 
 LINK = -lpthread -lssl -lcrypto -lm
 
 INC = -Iinc \
       -Isrc/lib/openssl/
 
-all: $(TARGET_PATH)/$(SVR_TARGET) $(TARGET_PATH)/$(AS_TARGET) $(TARGET_PATH)/$(CLT_TARGET)
+all: $(TARGET_PATH)/$(SVR_TARGET) $(TARGET_PATH)/$(USER_TOOL_TARGET) $(TARGET_PATH)/$(AS_TARGET) $(TARGET_PATH)/$(CLT_TARGET)
 
 $(TARGET_PATH)/$(SVR_TARGET):$(SVR_SRC)
+	@$(MKDIR) $(dir $@)
+	$(SVR_CC) -g $(INC) $^ -o $@ $(LINK)
+
+$(TARGET_PATH)/$(USER_TOOL_TARGET):$(USER_TOOL_SRC)
 	@$(MKDIR) $(dir $@)
 	$(SVR_CC) -g $(INC) $^ -o $@ $(LINK)
 
@@ -40,4 +47,4 @@ $(TARGET_PATH)/$(CLT_TARGET):$(CLT_SRC)
 
 .PHONY: clean
 clean:
-	$(RM) $(TARGET_PATH)/*
+	$(RM) $(TARGET_PATH)/$(SVR_TARGET) $(TARGET_PATH)/$(USER_TOOL_TARGET) $(TARGET_PATH)/$(AS_TARGET) $(TARGET_PATH)/$(CLT_TARGET)

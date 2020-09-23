@@ -1,9 +1,7 @@
 #ifndef ASSISTANT_COMMON_H
 #define ASSISTANT_COMMON_H
 
-typedef unsigned char u8;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include <types.h>
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 

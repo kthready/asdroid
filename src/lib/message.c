@@ -18,24 +18,29 @@
 
 int msg_send(int sockfd, const void *buf, size_t len, int flags)
 {
-	u8 **enc_buf;
+	u8 *enc_buf;
 	int err;
 
-	err = msg_aes_encrypt(buf, enc_buf, len);
+	enc_buf = (u8 *)malloc(AES_PADDING_LEN(len));
+	if (!enc_buf)
+		return -1;
+
+	err = msg_aes_encrypt(buf, &enc_buf, len);
 	if (err < 0)
 		return err;
 
-	err = send(sockfd, *enc_buf, AES_PADDING_LEN(len), flags);
-	sync();
-	free(*enc_buf);
+	err = send(sockfd, enc_buf, AES_PADDING_LEN(len), flags);
+
+	free(enc_buf);
 
 	return err;
 }
 
-int msg_recv(int sockfd, void *buf, size_t len, int flags)
+int msg_recv(int sockfd, void **buf, size_t len, int flags)
 {
 	u8 *tmp;
 	int err;
+	struct message *ptr;
 
 	tmp = malloc(len);
 	if (!tmp)
@@ -46,10 +51,12 @@ int msg_recv(int sockfd, void *buf, size_t len, int flags)
 	if (err < 0)
 		goto fail;
 
-	if (msg_aes_decrypt(tmp, &buf, len) < 0)
+	if (msg_aes_decrypt(tmp, (u8 **)buf, len) < 0)
 		err = -1;
 
-	if ((struct message *)buf->header.magic_num != MAGIC)
+	ptr = *buf;
+
+	if (ptr->header.magic_num != MAGIC)
 		err = -1;
 
 fail:

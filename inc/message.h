@@ -1,15 +1,19 @@
 #ifndef ASSISTANT_MESSAGE_H
 #define ASSISTANT_MESSAGE_H
 
+#include <user_verify.h>
+
 #define CTRD_PORT	8000
 #define CTWR_PORT	8001
 #define ASRD_PORT	8002
 #define ASWR_PORT	8003
+#define LOGON_PORT	8004
 
 #define MAGIC		0xacedfead
 
 enum as_command {
 	CMD_LOGON,
+	CMD_KICK,
 	CMD_MOTOR_LF,
 	CMD_MOTOR_RT,
 	CMD_MOTOR_FW,
@@ -30,16 +34,8 @@ struct rwfd {
 };
 
 struct as_message {
-	u32 magic;
 	u32 length;
 	int flag;
-};
-
-struct user_info {
-	u32 usrid;
-	char alias[16];
-	char passwd[16];
-	int logon_status;
 };
 
 struct clt_message {
@@ -59,6 +55,6 @@ struct message {
 };
 
 int msg_send(int sockfd, const void *buf, size_t len, int flags);
-int msg_recv(int sockfd, void *buf, size_t len, int flags);
+int msg_recv(int sockfd, void **buf, size_t len, int flags);
 
 #endif

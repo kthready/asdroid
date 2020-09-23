@@ -9,26 +9,27 @@
 #include <common.h>
 #include <message.h>
 #include <thread.h>
+#include <crypto.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-#define USER_NAME "kthread"
-#define USER_ID 0xFEADBACD
-#define PASSWD "kthread2020"
+#define USER_ID		0x8D00
+#define USER_NAME	"kthread"
+#define PASSWD		"kthread2020"
 
 static struct user_info user;
 
 static void client_read(int fd)
 {
 	struct message *prev_msg = NULL;
-	struct message *buf = NULL;
-	strcut as_message *as_msg;
+	struct message *vd_msg = NULL;
+	struct as_message *as_msg = NULL;
 	static u32 length = 0;
 	size_t prev_msg_len;
-	size_t suf_msg_len;
+	size_t vd_msg_len;
 	int err;
 
 	prev_msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct as_message));
@@ -39,38 +40,38 @@ static void client_read(int fd)
 	memset(prev_msg, 0, prev_msg_len);
 
 	while(1) {
-		err = msg_recv(fd, prev_msg, prev_msg_len, 0);
+		err = msg_recv(fd, &prev_msg, prev_msg_len, 0);
 		if (err < 0) {
-			printf("Failed to read message from asdroid\n");
+			printf("%s: Failed to read message from asdroid\n", __func__);
 			goto exit;
 		}
 
 		as_msg = (struct as_message *)prev_msg->priv_data;
-		suf_msg_len = sizeof(struct message) + as_msg->length;
-		if (length < suf_msg_len) {
-			if (buf)
-				free(buf);
+		vd_msg_len = as_msg->length;
+		if (!vd_msg || length < vd_msg_len) {
+			if (vd_msg)
+				free(vd_msg);
 
-			buf = malloc(suf_msg_len);
-			if (!buf)
+			vd_msg = (struct message *)malloc(vd_msg_len);
+			if (!vd_msg)
 				goto exit;
 
-			memset(buf, 0, suf_msg_len);
-			length = suf_msg_len;
+			memset(vd_msg, 0, vd_msg_len);
+			length = vd_msg_len;
 		}
 
-		err = msg_recv(fd, buf, suf_msg_len, 0);
+		err = msg_recv(fd, &vd_msg, vd_msg_len, 0);
 		if (err < 0) {
-			printf("Failed to read video from asdroid\n");
+			printf("%s: Failed to read video from asdroid\n", __func__);
 			goto exit;
 		}
 
-		printf("%s\n", buf->priv_data);
+		printf("%s: length: %d, %s\n", __func__, vd_msg->header.msg_length, vd_msg->priv_data);
 	}
 
 exit:
-	if (buf)
-		free(buf);
+	if (vd_msg)
+		free(vd_msg);
 	if (prev_msg)
 		free(prev_msg);
 
@@ -84,20 +85,20 @@ static void client_write(int fd)
 	size_t msg_len;
 	int i = 0;
 
-	msg_len = sizeof(struct message) + sizeof(struct clt_message);
+	msg_len = AES_PADDING_LEN(sizeof(struct message) + sizeof(struct clt_message));
 	msg = (struct message *)malloc(msg_len);
 	if (!msg)
 		pthread_exit(NULL);
 
 	memset(msg, 0, msg_len);
 	msg->header.magic_num = MAGIC;
-	msg->header.msg_length = msg_len;
+	msg->header.msg_length = sizeof(struct clt_message);
 	clt_msg = (struct clt_message *)msg->priv_data;
-	memcpy(clt_msg->user, &user, sizeof(user));
+	memcpy(&clt_msg->user, &user, sizeof(user));
 
 	while(1) {
 		clt_msg->cmd = random()%CMD_MOTOR_MAX;
-		printf("user_name: %s  userid: 0x%x  cmd: %d\n",
+		printf("%s: user_name: %s  userid: 0x%x  cmd: %d\n", __func__,
 			clt_msg->user.alias, clt_msg->user.usrid, clt_msg->cmd);
 		i++;
 		if (i >= 5) {
@@ -112,7 +113,7 @@ static void client_write(int fd)
 	pthread_exit(NULL);
 }
 
-static int client_authentication(int fd)
+static int client_logon(int fd)
 {
 	struct message *clt_msg;
 	struct message *recv_msg;
@@ -121,8 +122,8 @@ static int client_authentication(int fd)
 
 	msg_len = sizeof(struct message) + sizeof(struct user_info);
 	clt_msg = (struct message *)malloc(msg_len);
-	if (clt_msg) {
-		printf("Failed to alloc memory for message\n");
+	if (!clt_msg) {
+		printf("%s: Failed to alloc memory for message\n", __func__);
 		return -1;
 	}
 
@@ -131,27 +132,33 @@ static int client_authentication(int fd)
 	clt_msg->header.msg_length = msg_len;
 	memcpy(clt_msg->priv_data, &user, sizeof(user));
 
-	err = msg_send(fd, &clt_msg, msg_len, 0);
+	err = msg_send(fd, clt_msg, msg_len, 0);
 	if (err < 0) {
-		printf("Failed to msg_send user info to server\n");
+		printf("%s: Failed to msg_send user info to server\n", __func__);
 		goto fail;
 	}
 
 	msg_len = AES_PADDING_LEN(sizeof(*recv_msg) + sizeof(u32));
-	err = msg_recv(fd, recv_msg, msg_len, 0);
+	recv_msg = (struct message *)malloc(msg_len);
+	if (!recv_msg) {
+		err = -1;
+		goto fail;
+	}
+	memset(recv_msg, 0, sizeof(*recv_msg));
+	err = msg_recv(fd, &recv_msg, msg_len, 0);
 	if (err < 0) {
-		printf("Failed to get authentication result\n");
+		printf("%s: Failed to get authentication result\n", __func__);
 		goto fail;
 	}
 
 	if (*((u32 *)recv_msg->priv_data) != 1) {
-		printf("[%x] %s: Authentication failed\n", user.usrid, user.alias);
+		printf("%s: [%x] %s: Authentication failed\n", __func__, user.usrid, user.alias);
 		goto fail;
 	}
 
 	user.logon_status = 1;
-
-	return 0;
+	printf("%s: client logon successfully\n", __func__);
+	err = 0;
 
 fail:
 	if (clt_msg)
@@ -159,7 +166,7 @@ fail:
 	if (recv_msg)
 		free(recv_msg);
 
-	return -1;
+	return err;
 }
 
 static void *client_socket_thread(void *arg)
@@ -170,7 +177,7 @@ static void *client_socket_thread(void *arg)
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) {
-		printf("failed to create socket: %s\n", strerror(errno));
+		printf("%s: failed to create socket: %s\n", __func__, strerror(errno));
 		pthread_exit(NULL);
 	}
 
@@ -181,8 +188,15 @@ static void *client_socket_thread(void *arg)
 
 	err = connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
 	if (err < 0) {
-		printf("failed to connect to server: %s\n", strerror(errno));
+		printf("%s: failed to connect to server: %s\n", __func__, strerror(errno));
 		pthread_exit(NULL);
+	}
+
+	if (tinfo->port == LOGON_PORT && user.logon_status != 1) {
+		err = client_logon(fd);
+		printf("====================================\n");
+		if (err < 0)
+			goto exit;
 	}
 
 	if (tinfo->port == CTRD_PORT)
@@ -191,6 +205,7 @@ static void *client_socket_thread(void *arg)
 	if (tinfo->port == CTWR_PORT)
 		client_write(fd);
 
+exit:
 	close(fd);
 	pthread_exit(NULL);
 }
@@ -199,6 +214,10 @@ int main(int argc, char *argv[])
 {
 	int i;
 	struct thread_info tinfo[] = {
+		{
+			.port = LOGON_PORT,
+			.thread_socket = client_socket_thread,
+		},
 		{
 			.port = CTRD_PORT,
 			.thread_socket = client_socket_thread,
@@ -210,7 +229,7 @@ int main(int argc, char *argv[])
 	};
 
 	if (argc < 2) {
-		printf("Usage: %s <ip addr>\n", argv[0]);
+		printf("%s: Usage: %s <ip addr>\n", __func__, argv[0]);
 		return 0;
 	}
 
@@ -219,7 +238,13 @@ int main(int argc, char *argv[])
 	memcpy(user.alias, USER_NAME, sizeof(user.alias) - 1);
 	memcpy(user.passwd, PASSWD, sizeof(user.passwd) - 1);
 
-	for (i = 0; i < ARRAY_SIZE(tinfo); i++) {
+	pthread_create(&tinfo[0].tid, NULL, tinfo[0].thread_socket, &tinfo[i]);
+	pthread_join(tinfo[0].tid, NULL);
+
+	if (user.logon_status != 1)
+		return 0;
+
+	for (i = 1; i < ARRAY_SIZE(tinfo); i++) {
 		tinfo[i].data = argv[1];
 		if (tinfo[i].thread_socket)
 			pthread_create(&tinfo[i].tid, NULL, tinfo[i].thread_socket, &tinfo[i]);
