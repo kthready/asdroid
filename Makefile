@@ -1,6 +1,6 @@
 SVR_PREFIX =
-AS_PREFIX =
-CLT_PREFIX =
+AS_PREFIX = aarch64-linux-gnu-
+CLT_PREFIX = aarch64-linux-gnu-
 
 SVR_CC = $(SVR_PREFIX)gcc
 AS_CC = $(AS_PREFIX)gcc
@@ -24,8 +24,7 @@ USER_TOOL_SRC = src/server/usertool.c src/lib/crypto.c
 
 LINK = -lpthread -lssl -lcrypto -lm
 
-INC = -Iinc \
-      -Isrc/lib/openssl/
+INC = -Iinc/
 
 all: $(TARGET_PATH)/$(SVR_TARGET) $(TARGET_PATH)/$(USER_TOOL_TARGET) $(TARGET_PATH)/$(AS_TARGET) $(TARGET_PATH)/$(CLT_TARGET)
 
@@ -39,7 +38,7 @@ $(TARGET_PATH)/$(USER_TOOL_TARGET):$(USER_TOOL_SRC)
 
 $(TARGET_PATH)/$(AS_TARGET):$(AS_SRC)
 	@$(MKDIR) $(dir $@)
-	$(AS_CC) -g $(INC) $^ -o $@ $(LINK)
+	$(AS_CC) -g $(INC) -I/usr/include/ $^ -o $@ $(LINK)
 
 $(TARGET_PATH)/$(CLT_TARGET):$(CLT_SRC)
 	@$(MKDIR) $(dir $@)
