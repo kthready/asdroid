@@ -55,6 +55,6 @@ struct message {
 };
 
 int msg_send(int sockfd, const void *buf, size_t len, int flags);
-int msg_recv(int sockfd, void **buf, size_t len, int flags);
+int msg_recv(int sockfd, struct message **buf, size_t len, int flags);
 
 #endif

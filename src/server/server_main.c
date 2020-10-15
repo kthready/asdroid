@@ -165,7 +165,7 @@ static void *msg_from_client_to_asdroid(void *arg)
 			printf("%s: Failed to read message from client\n", __func__);
 			continue;
 		}
-		clt_msg = msg->priv_data;
+		clt_msg = (struct clt_message *)msg->priv_data;
 		if (clt_msg->user.logon_status == 0) {
 			cltfd.wrfd = 0;
 			cltfd.rdfd = 0;
